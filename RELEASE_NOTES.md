@@ -1,3 +1,34 @@
+# Release v1.4.1 - ARMv7 Compatibility Fix 🔧
+
+## 🐛 Bug Fixes
+
+### Fixed SIGBUS Crash on 32-bit ARMv7 Devices
+- **Issue**: Native crash (SIGBUS, BUS_ADRALN) when loading INT8 ONNX models on 32-bit ARM devices
+- **Root Cause**: Memory-mapped model loading caused unaligned memory access on ARMv7
+- **Fix**: Architecture-aware model loading that uses byte array loading on 32-bit ARM to bypass mmap alignment issues
+- **Impact**: INT8 models now load correctly on older 32-bit Android devices
+
+See [ADR-005](docs/adr/ADR-005-sigbus-fix-armv7-int8-models.md) for technical details.
+
+## 📥 Downloads
+
+| Variant | Description |
+|---------|-------------|
+| app-universal-release.apk | Works on all devices |
+| app-arm64-v8a-release.apk | Modern 64-bit devices |
+| app-armeabi-v7a-release.apk | Older 32-bit devices (now fixed!) |
+
+## 💡 Upgrade Notes
+Drop-in upgrade from v1.4.0. No data migration required.
+
+---
+
+# Release v1.4.0 - Previous Release
+
+(Previous release notes below)
+
+---
+
 # Release v1.2.0 - Adaptive Streaming Engine 🚀
 
 ## ⭐ What's New

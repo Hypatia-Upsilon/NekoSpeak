@@ -133,7 +133,17 @@ class KokoroEngine(private val context: Context) : TtsEngine {
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             }
             
-            ortSession = ortEnv?.createSession(modelFile.absolutePath, options)
+            // Use byte array loading on 32-bit ARM to avoid mmap alignment issues
+            val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: ""
+            val is32BitArm = abi == "armeabi-v7a" || abi == "armeabi"
+            
+            ortSession = if (is32BitArm) {
+                Log.i(TAG, "Using byte array loading for 32-bit ARM compatibility")
+                val modelBytes = modelFile.readBytes()
+                ortEnv?.createSession(modelBytes, options)
+            } else {
+                ortEnv?.createSession(modelFile.absolutePath, options)
+            }
             
             // Introspect inputs
             val inputNames = ortSession?.inputNames ?: emptySet()

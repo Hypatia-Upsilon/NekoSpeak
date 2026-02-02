@@ -63,6 +63,14 @@ class GtcrnDenoiser(private val context: Context) {
     }
     
     /**
+     * Check if running on 32-bit ARM (has memory alignment issues with mmap).
+     */
+    private fun is32BitArm(): Boolean {
+        val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: ""
+        return abi == "armeabi-v7a" || abi == "armeabi"
+    }
+    
+    /**
      * Initialize the denoiser. Loads the model from bundled assets.
      */
     suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
@@ -77,7 +85,15 @@ class GtcrnDenoiser(private val context: Context) {
             val sessionOptions = OrtSession.SessionOptions().apply {
                 setIntraOpNumThreads(2)
             }
-            session = ortEnv!!.createSession(modelFile.absolutePath, sessionOptions)
+            
+            // Use byte array loading on 32-bit ARM to avoid mmap alignment issues
+            session = if (is32BitArm()) {
+                Log.d(TAG, "Using byte array loading for 32-bit ARM compatibility")
+                val modelBytes = modelFile.readBytes()
+                ortEnv!!.createSession(modelBytes, sessionOptions)
+            } else {
+                ortEnv!!.createSession(modelFile.absolutePath, sessionOptions)
+            }
             isInitialized = true
             
             Log.i(TAG, "GTCRN denoiser initialized successfully with JTransforms FFT")

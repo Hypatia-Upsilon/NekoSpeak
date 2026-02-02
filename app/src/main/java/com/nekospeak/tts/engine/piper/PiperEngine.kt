@@ -98,7 +98,18 @@ class PiperEngine(
                      setIntraOpNumThreads(4)
                 }
                 Log.v(TAG, "Creating ONNX Session from ${modelFile.absolutePath}...")
-                ortSession = ortEnv?.createSession(modelFile.absolutePath, opts)
+                
+                // Use byte array loading on 32-bit ARM to avoid mmap alignment issues
+                val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: ""
+                val is32BitArm = abi == "armeabi-v7a" || abi == "armeabi"
+                
+                ortSession = if (is32BitArm) {
+                    Log.v(TAG, "Using byte array loading for 32-bit ARM compatibility")
+                    val modelBytes = modelFile.readBytes()
+                    ortEnv?.createSession(modelBytes, opts)
+                } else {
+                    ortEnv?.createSession(modelFile.absolutePath, opts)
+                }
                 Log.v(TAG, "ONNX Session created.")
             } catch (e: Throwable) {
                 Log.e(TAG, "CRITICAL: ONNX Init Failed!", e)
