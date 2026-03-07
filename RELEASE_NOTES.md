@@ -1,3 +1,48 @@
+# Release v1.4.2 - Clone Stability & In-App Diagnostics 🛠️
+
+## 🐛 Bug Fixes
+
+### Fixed Pocket-TTS clone crashes on some devices
+- **Issue**: App could close during voice cloning when a second full Pocket-TTS engine was initialized in parallel.
+- **Fix**: Added a clone-only Pocket-TTS engine mode that loads only the required `mimi_encoder` model for voice embedding.
+- **Result**: Lower peak memory usage during cloning and improved stability.
+
+### Added explicit clone failure feedback
+- Clone failures now show a user-facing snackbar instead of failing silently.
+- Improves accessibility for TalkBack users by giving immediate error context.
+
+## 🆕 New: In-App Support Reporting
+
+- Added **Generate Support Report** in Settings (About section).
+- Report includes:
+  - `meta.json` (device/app/runtime metadata)
+  - `prefs_snapshot.json` (safe settings snapshot)
+  - `events.log` (app diagnostics breadcrumbs)
+  - `last_crash.txt` (latest uncaught exception, if available)
+- Added **Share Support Report** action with secure file sharing (`FileProvider`).
+- Added **File Bug on GitHub** action using a prefilled bug template with labels `bug,needs-triage`.
+
+## ♻️ Retention Policy
+
+- Prevents report/log accumulation:
+  - Max 10 support report archives
+  - Max 20 MB total report storage
+  - 14-day TTL for old reports
+  - Rolling `events.log` capped at 1 MB
+
+## 📥 Downloads
+
+| Variant | Description |
+|---------|-------------|
+| app-universal-release.apk | Works on all devices |
+| app-arm64-v8a-release.apk | Modern 64-bit devices |
+| app-armeabi-v7a-release.apk | Older 32-bit devices |
+
+## 💡 Upgrade Notes
+Drop-in upgrade from v1.4.1. No data migration required.
+
+---
+
 # Release v1.4.1 - ARMv7 Compatibility Fix 🔧
 
 ## 🐛 Bug Fixes

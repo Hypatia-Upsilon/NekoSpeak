@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.nekospeak.tts.data.VoiceDefinitions
 import com.nekospeak.tts.engine.pocket.PocketVoiceState
+import com.nekospeak.tts.support.SupportLogStore
 import java.io.File
 
 data class Voice(
@@ -59,7 +60,8 @@ class VoicesViewModel(application: Application) : AndroidViewModel(application) 
         val availableQualities: List<String> = emptyList(),
         
         // Processing status for voice encoding feedback
-        val processingStatus: String? = null // e.g., "Encoding celebrity voice: Oprah Winfrey..."
+        val processingStatus: String? = null, // e.g., "Encoding celebrity voice: Oprah Winfrey..."
+        val cloneErrorMessage: String? = null
     )
     
     private val _uiState = MutableStateFlow(UiState())
@@ -525,14 +527,28 @@ class VoicesViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cloneVoice(path: String, name: String, transcript: String = "") {
         android.util.Log.i("VoicesViewModel", "cloneVoice called: path=$path, name=$name")
+        SupportLogStore.log(context, "VoicesViewModel", "Clone requested for voice='$name'")
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            _uiState.update { it.copy(isLoading = true, processingStatus = "Processing voice: $name...") } 
+            _uiState.update {
+                it.copy(
+                    isLoading = true,
+                    processingStatus = "Processing voice: $name...",
+                    cloneErrorMessage = null
+                )
+            }
             try {
                 // Check if file exists
                 val sourceFile = java.io.File(path)
                 if (!sourceFile.exists()) {
                     android.util.Log.e("VoicesViewModel", "Audio file does not exist: $path")
-                    _uiState.update { it.copy(isLoading = false, processingStatus = null) }
+                    SupportLogStore.log(context, "VoicesViewModel", "Clone failed: source audio file missing")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            processingStatus = null,
+                            cloneErrorMessage = "Voice cloning failed. Audio file could not be found."
+                        )
+                    }
                     return@launch
                 }
                 android.util.Log.i("VoicesViewModel", "Audio file exists: ${sourceFile.length()} bytes")
@@ -548,34 +564,54 @@ class VoicesViewModel(application: Application) : AndroidViewModel(application) 
                 // Update status: Initializing engine
                 _uiState.update { it.copy(processingStatus = "Encoding voice: $name (this may take a moment)...") }
                 
-                // Initialize a temporary engine for cloning
-                val engine = com.nekospeak.tts.engine.pocket.PocketTtsEngine(context)
-                android.util.Log.i("VoicesViewModel", "Initializing PocketTtsEngine for cloning...")
-                if (engine.initialize()) {
-                    android.util.Log.i("VoicesViewModel", "Engine initialized, calling cloneVoice...")
-                    // TODO: Use transcript for text conditioning in voice cloning
-                    val voiceId = engine.cloneVoice(permanentFile.absolutePath, name)
-                    if (voiceId != null) {
-                        android.util.Log.i("VoicesViewModel", "Voice cloned successfully: $voiceId")
+                // Initialize a lightweight clone-only engine to avoid OOM/native crashes
+                val engine = com.nekospeak.tts.engine.pocket.PocketTtsEngine(context, cloneOnly = true)
+                android.util.Log.i("VoicesViewModel", "Initializing PocketTtsEngine (clone-only) for cloning...")
+                try {
+                    if (engine.initialize()) {
+                        android.util.Log.i("VoicesViewModel", "Engine initialized, calling cloneVoice...")
+                        SupportLogStore.log(context, "VoicesViewModel", "Clone engine initialized (clone-only)")
+                        // TODO: Use transcript for text conditioning in voice cloning
+                        val voiceId = engine.cloneVoice(permanentFile.absolutePath, name)
+                        if (voiceId != null) {
+                            android.util.Log.i("VoicesViewModel", "Voice cloned successfully: $voiceId")
+                            SupportLogStore.log(context, "VoicesViewModel", "Clone succeeded: voiceId='$voiceId'")
+                            _uiState.update { it.copy(cloneErrorMessage = null) }
+                        } else {
+                            android.util.Log.e("VoicesViewModel", "cloneVoice returned null")
+                            SupportLogStore.log(context, "VoicesViewModel", "Clone failed: cloneVoice returned null")
+                            _uiState.update {
+                                it.copy(cloneErrorMessage = "Voice cloning failed. Please try again with a clearer recording.")
+                            }
+                        }
+
+                        loadVoices() // Refresh list to show new voice
                     } else {
-                        android.util.Log.e("VoicesViewModel", "cloneVoice returned null")
+                        android.util.Log.e("VoicesViewModel", "Failed to initialize engine for cloning")
+                        SupportLogStore.log(context, "VoicesViewModel", "Clone failed: engine initialization failed")
+                        _uiState.update {
+                            it.copy(cloneErrorMessage = "Voice cloning failed. The cloning engine could not be initialized.")
+                        }
                     }
+                } finally {
                     engine.release()
-                    
                     // Clean up temporary input file
-                    permanentFile.delete()
-                    
-                    loadVoices() // Refresh list to show new voice
-                } else {
-                    android.util.Log.e("VoicesViewModel", "Failed to initialize engine for cloning")
                     permanentFile.delete()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("VoicesViewModel", "Error in cloneVoice", e)
                 e.printStackTrace()
+                SupportLogStore.log(context, "VoicesViewModel", "Clone failed with exception", e)
+                _uiState.update {
+                    it.copy(cloneErrorMessage = "Voice cloning failed. Please try again.")
+                }
             }
             _uiState.update { it.copy(isLoading = false, processingStatus = null) }
         }
+    }
+
+    fun clearCloneError() {
+        _uiState.update { it.copy(cloneErrorMessage = null) }
     }
     
     /**

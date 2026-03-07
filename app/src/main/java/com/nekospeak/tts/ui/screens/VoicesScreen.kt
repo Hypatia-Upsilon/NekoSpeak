@@ -38,6 +38,7 @@ fun VoicesScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { PrefsManager(context) }
+    val snackbarHostState = remember { SnackbarHostState() }
     
     // Test Speech State
     var testText by remember { mutableStateOf("Hello, I am NekoSpeak.") }
@@ -98,6 +99,14 @@ fun VoicesScreen(
             onVoiceCloneHandled()
         }
     }
+
+    LaunchedEffect(uiState.cloneErrorMessage) {
+        val message = uiState.cloneErrorMessage
+        if (!message.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearCloneError()
+        }
+    }
     
     // File picker for audio upload
     val audioPickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -119,6 +128,9 @@ fun VoicesScreen(
     }
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
         topBar = {
             TopAppBar(
                 title = { 

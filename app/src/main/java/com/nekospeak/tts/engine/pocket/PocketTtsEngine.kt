@@ -29,7 +29,10 @@ import java.nio.LongBuffer
  * - flow_lm_flow: Flow matching ODE solver step
  * - mimi_decoder: Latents -> Audio
  */
-class PocketTtsEngine(private val context: Context) : TtsEngine {
+class PocketTtsEngine(
+    private val context: Context,
+    private val cloneOnly: Boolean = false
+) : TtsEngine {
     
     companion object {
         private const val TAG = "PocketTtsEngine"
@@ -163,7 +166,7 @@ class PocketTtsEngine(private val context: Context) : TtsEngine {
     
     override suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
         try {
-            Log.i(TAG, "Initializing Pocket-TTS Engine...")
+            Log.i(TAG, "Initializing Pocket-TTS Engine... cloneOnly=$cloneOnly")
             
             ortEnv = OrtEnvironment.getEnvironment()
             
@@ -173,14 +176,18 @@ class PocketTtsEngine(private val context: Context) : TtsEngine {
                 return@withContext false
             }
             
-            // Check if all models exist
-            val modelFiles = listOf(
-                MODEL_MIMI_ENCODER,
-                MODEL_TEXT_CONDITIONER,
-                MODEL_FLOW_LM_MAIN,
-                MODEL_FLOW_LM_FLOW,
-                MODEL_MIMI_DECODER
-            )
+            // Check required model files first
+            val modelFiles = if (cloneOnly) {
+                listOf(MODEL_MIMI_ENCODER)
+            } else {
+                listOf(
+                    MODEL_MIMI_ENCODER,
+                    MODEL_TEXT_CONDITIONER,
+                    MODEL_FLOW_LM_MAIN,
+                    MODEL_FLOW_LM_FLOW,
+                    MODEL_MIMI_DECODER
+                )
+            }
             
             for (model in modelFiles) {
                 val modelFile = File(modelsDir, model)
@@ -195,28 +202,30 @@ class PocketTtsEngine(private val context: Context) : TtsEngine {
             
             Log.d(TAG, "Loading ONNX models...")
             mimiEncoder = loadModel(modelsDir, MODEL_MIMI_ENCODER, sessionOptions)
-            textConditioner = loadModel(modelsDir, MODEL_TEXT_CONDITIONER, sessionOptions)
-            flowLmMain = loadModel(modelsDir, MODEL_FLOW_LM_MAIN, sessionOptions)
-            flowLmFlow = loadModel(modelsDir, MODEL_FLOW_LM_FLOW, sessionOptions)
-            mimiDecoder = loadModel(modelsDir, MODEL_MIMI_DECODER, sessionOptions)
-            
-            // Initialize codec
-            mimiCodec = MimiCodec(mimiEncoder!!, mimiDecoder!!, ortEnv!!)
-            
-            // Initialize tokenizer
-            tokenizer = PocketTokenizer(context)
-            tokenizer?.load()
-            
-            // Initialize GTCRN denoiser for audio preprocessing (downloads model on first use)
-            gtcrnDenoiser = GtcrnDenoiser(context)
-            // Initialize async - don't block engine init, model downloads on-demand
-            CoroutineScope(Dispatchers.IO).launch {
-                gtcrnDenoiser?.initialize()
+            if (!cloneOnly) {
+                textConditioner = loadModel(modelsDir, MODEL_TEXT_CONDITIONER, sessionOptions)
+                flowLmMain = loadModel(modelsDir, MODEL_FLOW_LM_MAIN, sessionOptions)
+                flowLmFlow = loadModel(modelsDir, MODEL_FLOW_LM_FLOW, sessionOptions)
+                mimiDecoder = loadModel(modelsDir, MODEL_MIMI_DECODER, sessionOptions)
+                
+                // Initialize codec
+                mimiCodec = MimiCodec(mimiEncoder!!, mimiDecoder!!, ortEnv!!)
+                
+                // Initialize tokenizer
+                tokenizer = PocketTokenizer(context)
+                tokenizer?.load()
+                
+                // Initialize GTCRN denoiser for audio preprocessing (downloads model on first use)
+                gtcrnDenoiser = GtcrnDenoiser(context)
+                // Initialize async - don't block engine init, model downloads on-demand
+                CoroutineScope(Dispatchers.IO).launch {
+                    gtcrnDenoiser?.initialize()
+                }
+                
+                // Load available voices
+                loadBundledVoices()
+                loadClonedVoices()
             }
-            
-            // Load available voices
-            loadBundledVoices()
-            loadClonedVoices()
             
             Log.i(TAG, "Pocket-TTS initialized with ${voiceStates.size} voices")
             initialized = true
@@ -858,6 +867,11 @@ class PocketTtsEngine(private val context: Context) : TtsEngine {
         voice: String?,
         callback: (FloatArray) -> Unit
     ): Unit = withContext(Dispatchers.Default) {
+        if (cloneOnly) {
+            Log.w(TAG, "Generate called on clone-only PocketTtsEngine")
+            return@withContext
+        }
+
         // Reset stop flag at start of new generation
         stopRequested = false
         

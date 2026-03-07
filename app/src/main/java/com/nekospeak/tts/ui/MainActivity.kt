@@ -11,6 +11,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.nekospeak.tts.data.PrefsManager
+import com.nekospeak.tts.support.SupportCrashHandler
+import com.nekospeak.tts.support.SupportLogStore
+import com.nekospeak.tts.support.SupportReportManager
 import com.nekospeak.tts.ui.theme.AppTheme
 import com.nekospeak.tts.ui.theme.DarkThemeMode
 import com.nekospeak.tts.ui.theme.NekoSpeakTheme
@@ -18,6 +21,9 @@ import com.nekospeak.tts.ui.theme.NekoSpeakTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SupportCrashHandler.install(this)
+        SupportReportManager.cleanupReports(this)
+        SupportLogStore.log(this, "MainActivity", "Application UI started")
         enableEdgeToEdge()
         setContent {
             ThemedApp()

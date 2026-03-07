@@ -18,13 +18,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.nekospeak.tts.support.SupportReportManager
+import com.nekospeak.tts.support.SupportShareHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var lastReport by remember { mutableStateOf<File?>(SupportReportManager.latestReport(context)) }
+    var generatingReport by remember { mutableStateOf(false) }
     
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Settings") }
@@ -519,6 +530,72 @@ fun SettingsScreen(navController: NavController) {
                     subtitle = "Version ${com.nekospeak.tts.BuildConfig.VERSION_NAME}",
                     icon = Icons.Default.Info,
                     onClick = { }
+                )
+
+                SettingsItem(
+                    title = if (generatingReport) "Generating Support Report..." else "Generate Support Report",
+                    subtitle = "Creates a zip with diagnostics and recent app logs",
+                    icon = Icons.Default.Warning,
+                    onClick = {
+                        if (generatingReport) {
+                            return@SettingsItem
+                        }
+
+                        generatingReport = true
+                        scope.launch {
+                            try {
+                                val report = withContext(Dispatchers.IO) {
+                                    SupportReportManager.createReport(context)
+                                }
+                                lastReport = report
+                                snackbarHostState.showSnackbar("Support report ready: ${report.name}")
+                            } catch (t: Throwable) {
+                                snackbarHostState.showSnackbar("Failed to generate support report")
+                            } finally {
+                                generatingReport = false
+                            }
+                        }
+                    }
+                )
+
+                SettingsItem(
+                    title = "Share Support Report",
+                    subtitle = "Share the latest report zip",
+                    icon = Icons.Default.Info,
+                    onClick = {
+                        val report = lastReport ?: SupportReportManager.latestReport(context)
+                        if (report == null || !report.exists()) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("No support report yet. Generate one first.")
+                            }
+                            return@SettingsItem
+                        }
+
+                        lastReport = report
+                        try {
+                            SupportShareHelper.shareReport(context, report)
+                        } catch (t: Throwable) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Unable to share support report")
+                            }
+                        }
+                    }
+                )
+
+                SettingsItem(
+                    title = "File Bug on GitHub",
+                    subtitle = "Opens prefilled bug template with metadata",
+                    icon = Icons.Default.Info,
+                    onClick = {
+                        val reportName = (lastReport ?: SupportReportManager.latestReport(context))?.name
+                        try {
+                            SupportShareHelper.openIssue(context, reportName)
+                        } catch (t: Throwable) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("Unable to open GitHub bug form")
+                            }
+                        }
+                    }
                 )
             }
         }

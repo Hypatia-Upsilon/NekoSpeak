@@ -8,6 +8,7 @@ import android.speech.tts.TextToSpeechService
 import android.speech.tts.Voice
 import android.media.AudioFormat
 import android.util.Log
+import com.nekospeak.tts.support.SupportLogStore
 import com.nekospeak.tts.engine.TtsEngine
 import com.nekospeak.tts.engine.KokoroEngine
 import kotlinx.coroutines.CoroutineScope
@@ -81,6 +82,7 @@ class NekoTtsService : TextToSpeechService() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "NekoTtsService created")
+        SupportLogStore.log(this, TAG, "Service created")
         
         // Register Prefs Listener
         prefsManager = com.nekospeak.tts.data.PrefsManager(this)
@@ -104,9 +106,11 @@ class NekoTtsService : TextToSpeechService() {
                 val newEngine = com.nekospeak.tts.engine.EngineFactory.createEngine(applicationContext, modelType)
                 
                 Log.i(TAG, "Created ${newEngine::class.java.simpleName}. Initializing...")
+                SupportLogStore.log(applicationContext, TAG, "Initializing engine for model=$modelType")
                 
                 if (newEngine.initialize()) {
                     Log.i(TAG, "Engine initialized successfully.")
+                    SupportLogStore.log(applicationContext, TAG, "Engine initialized successfully for model=$modelType")
                     
                     // Acquire mutex before swapping engines
                     synthMutex.withLock {
@@ -123,12 +127,14 @@ class NekoTtsService : TextToSpeechService() {
                     newEngine
                 } else {
                     Log.e(TAG, "Engine initialization FAILED. Keeping old engine if available.")
+                    SupportLogStore.log(applicationContext, TAG, "Engine initialization failed for model=$modelType")
                     // DON'T swap engines on failure - keep the old working engine
                     // Return null to indicate failure
                     null
                 }
             } catch (t: Throwable) {
                 Log.e(TAG, "CRITICAL: InitJob crashed", t)
+                SupportLogStore.log(applicationContext, TAG, "Engine initialization crashed", t)
                 // Don't swap on exception either
                 null
             }
@@ -238,6 +244,7 @@ class NekoTtsService : TextToSpeechService() {
 
         if (engine == null || !engine.isInitialized()) {
             Log.e(TAG, "[$reqId] Engine not initialized")
+            SupportLogStore.log(this, TAG, "Synthesis failed: engine not initialized")
             callback.error()
             return
         }
