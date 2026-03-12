@@ -9,7 +9,7 @@ on:
         type: string
         default: 'com.nekospeak.tts.alpha'
 #  push:
-#    branches: [ "main", "master" ]
+#    branches:[ "main", "master" ]
 
 jobs:
   build:
@@ -51,28 +51,39 @@ jobs:
           sed -i 's/keyAlias = "[^"]*"/keyAlias = System.getenv("KEY_ALIAS")/g' app/build.gradle.kts
           sed -i 's/keyPassword = "[^"]*"/keyPassword = System.getenv("KEY_PASSWORD")/g' app/build.gradle.kts
 
-      - name: 6. Build and Auto-Sign Release APKs
+      # ==========================================
+      # 新增：步骤 6 - 完整打印修改后的 build.gradle.kts 校验
+      # ==========================================
+      - name: 6. Verify modified build.gradle.kts
+        run: |
+          echo "================================================="
+          echo "      修改后的 build.gradle.kts 完整内容           "
+          echo "================================================="
+          cat app/build.gradle.kts
+          echo "================================================="
+          echo "检查点提示："
+          echo "1. 请确认 signingConfigs 块中的密码已被替换为 System.getenv(...)"
+          echo "2. 请确认 defaultConfig 块中的 applicationId 是否符合预期"
+
+      - name: 7. Build and Auto-Sign Release APKs
         env:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
-      - name: 7. Upload Final APKs
+      - name: 8. Upload Final APKs
         uses: actions/upload-artifact@v4
         with:
           name: NekoSpeak-Signed-APKs
           path: app/build/outputs/apk/release/*.apk
 
-      # ==========================================
-      # 新增：步骤 8 - 终极安全清洗 (Active Cleanup)
-      # ==========================================
-      - name: 8. Security Cleanup (主动清洗签名与敏感信息)
-        if: always()  # 关键点：即使前面的编译报错失败，此步骤也绝对会被强制执行！
+      - name: 9. Security Cleanup (主动清洗签名与敏感信息)
+        if: always()
         run: |
           echo "🧹 开始主动清洗构建环境中的敏感数据..."
           
-          # A. 粉碎物理签名文件 (使用 shred 命令彻底覆写磁盘数据，防止工具恢复，并删除)
+          # 修复点：确保此处的 if 和[ 之间也有空格
           if [ -f "app/release.keystore" ]; then
             shred -u app/release.keystore || rm -f app/release.keystore
             echo "✅ Keystore 物理文件已彻底覆写并销毁。"
@@ -80,6 +91,5 @@ jobs:
             echo "ℹ️ 未发现 Keystore 文件，无需清理。"
           fi
           
-          # B. 还原被魔改的构建脚本 (撤销对 build.gradle.kts 的内存替换)
           git checkout app/build.gradle.kts 2>/dev/null || true
           echo "✅ 构建脚本已恢复至上游无痕状态。"
