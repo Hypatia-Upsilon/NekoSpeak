@@ -41,7 +41,7 @@ jobs:
       - name: 5. Dynamic modify build.gradle.kts (The Magic Step)
         run: |
           APP_ID="${{ github.event.inputs.custom_application_id }}"
-          if[ -n "$APP_ID" ]; then
+          if [ -n "$APP_ID" ]; then
             echo "🔥 正在将包名替换为: $APP_ID"
             sed -i "s/applicationId = \"[^\"]*\"/applicationId = \"$APP_ID\"/g" app/build.gradle.kts
           fi
